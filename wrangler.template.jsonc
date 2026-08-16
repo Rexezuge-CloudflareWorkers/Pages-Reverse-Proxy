@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pages-reverse-proxy",
+  "compatibility_date": "2026-08-16",
+  "pages_build_output_dir": "public/",
+  "services": [
+    {
+      "binding": "API_WORKER",
+      "service": "your-worker-service-name",
+    },
+  ],
+  "vars": {
+    "PROXY_TARGET_BINDING": "API_WORKER",
+  },
+}

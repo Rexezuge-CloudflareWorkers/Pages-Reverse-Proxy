@@ -1,0 +1,28 @@
+{
+  "name": "pages-reverse-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "postinstall": "wrangler types --config wrangler.template.jsonc",
+    "typegen": "wrangler types --config wrangler.template.jsonc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint --ext .ts --fix --quiet .",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "@vitest/coverage-v8": "4.1.10",
+    "eslint": "10.8.1",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-prettier": "5.5.6",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.66.0",
+    "vitest": "4.1.10",
+    "wrangler": "4.115.0"
+  },
+  "packageManager": "pnpm@11.2.2"
+}
