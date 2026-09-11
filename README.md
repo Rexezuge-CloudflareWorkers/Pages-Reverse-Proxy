@@ -79,5 +79,5 @@ Responses from the target are returned unchanged. An unconfigured binding yields
 
 ## CI/CD
 
-- **CI**: lint + typecheck + tests on every push and pull request.
-- **CD**: deploys to Cloudflare Pages on `main`. Set the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and the variable `CLOUDFLARE_PAGES_PROJECT_NAME`.
+- **CI**: lint + typecheck + tests on every push and pull request. Dependabot PRs (npm, weekly) auto-merge once `verify` passes. Flaky setup uses the shared `setup-env` / `retry-step` actions.
+- **CD**: deploys to Cloudflare Pages on `main` with `retry-step` around the Wrangler deploy. Set the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and the variable `CLOUDFLARE_PAGES_PROJECT_NAME`. Enable `Allow auto-merge` in repository settings for Dependabot auto-merge.
