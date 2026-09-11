@@ -9,6 +9,10 @@ on:
       - main
   pull_request:
 
+concurrency:
+  group: continuous-integration-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     name: Lint, Typecheck, And Test
@@ -18,17 +22,8 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v6
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: pnpm
-
-      - name: Install Dependencies
-        run: pnpm install
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
 
       - name: Typecheck
         run: pnpm run typecheck
@@ -38,3 +33,26 @@ jobs:
 
       - name: Test
         run: pnpm run test
+
+  dependabot-auto-merge:
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.state == 'open' && !github.event.repository.fork }}
+    name: Auto-Merge Dependabot PR
+    needs:
+      - verify
+    permissions:
+      contents: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Enable Auto-Merge
+        uses: ./.github/actions/retry-step
+        with:
+          command: gh pr merge --auto --merge "$PR_URL"
+          max_attempts: '5'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}

@@ -39,12 +39,15 @@ The `postinstall` script runs `wrangler types` automatically, so `worker-configu
 - `test/proxy.test.ts` — Vitest unit tests for binding resolution, header forwarding, body forwarding, and error responses.
 - `public/` — placeholder Pages asset directory (empty except `.gitkeep`).
 - `wrangler.template.jsonc` — Pages config template; copy to `wrangler.jsonc` per deployer; no committed `wrangler.jsonc`.
+- `.github/dependabot.yml` — weekly npm updates (mirrors Otter).
+- `.github/actions/retry-step/` — shared retry wrapper for flaky commands (mirrors Otter).
+- `.github/actions/setup-env/` — shared pnpm + Node 24 + cached `pnpm install` with retry (mirrors Otter).
 
 ## Conventions
 
 - ESLint (typescript-eslint recommended + prettier) and Prettier (140 col, single quotes) match the Mail-Otter repo conventions this was extracted from.
 - Keep `PROXY_TARGET_BINDING` the only runtime knob. Any new power should stay config-driven, not code edits.
-- CI (lint/typecheck/test) runs on every push/PR; CD deploys Pages on `main` using secrets `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` and variable `CLOUDFLARE_PAGES_PROJECT_NAME`.
+- CI (lint/typecheck/test) runs on every push/PR with concurrency cancel-in-progress; Dependabot PRs auto-merge via `gh pr merge --auto --merge` once `verify` passes (requires `Allow auto-merge` repo setting); CD deploys Pages on `main` using secrets `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` and variable `CLOUDFLARE_PAGES_PROJECT_NAME`, with `retry-step` around installs and deploys.
 
 ## Cloudflare Documentation
 
