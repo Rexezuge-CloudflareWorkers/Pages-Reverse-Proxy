@@ -22,7 +22,7 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.0",
     "vitest": "5.0.1",
-    "wrangler": "4.136.1"
+    "wrangler": "4.143.0"
   },
   "packageManager": "pnpm@11.2.2"
 }
