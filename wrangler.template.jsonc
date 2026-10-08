@@ -5,11 +5,11 @@
   "pages_build_output_dir": "public/",
   "services": [
     {
-      "binding": "API_WORKER",
+      "binding": "PROXY_TARGET",
       "service": "your-worker-service-name",
     },
   ],
   "vars": {
-    "PROXY_TARGET_BINDING": "API_WORKER",
+    "PROXY_TARGET_BINDING": "PROXY_TARGET",
   },
 }

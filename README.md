@@ -7,44 +7,36 @@ Static files placed in `public/` are served directly by Pages; everything else i
 ## How It Works
 
 - `functions/[[path]].ts` is the Pages Functions catch-all.
-- The env var `PROXY_TARGET_BINDING` names the service binding to use (default `API_WORKER` when unset).
+- The env var `PROXY_TARGET_BINDING` names the service binding to use (default `PROXY_TARGET` when unset).
 - The binding must be declared in `wrangler.jsonc` as a service binding — declare as many workers as you like and pick one at runtime.
 
 ## Configure
 
-1. Copy the template and fill in the target worker's service name:
+Each deploy resolves the backend Worker service name into `wrangler.jsonc` via
+`scripts/deploy/configure-pages-bindings.ts` (run locally with
+`volta run pnpm run configure:pages`). The script reads
+`wrangler.template.jsonc` and writes `wrangler.jsonc` itself, so never copy or
+hand-edit the output file:
 
-   ```bash
-   cp wrangler.template.jsonc wrangler.jsonc
-   ```
+1. Set the `PROXY_TARGET_SERVICE` repository variable (or env var locally) to
+   the target Worker service name — when set, it always wins and no API call
+   is made.
+2. Otherwise the account's Worker scripts are listed (Pages projects excluded)
+   and the single worker is picked automatically. Zero or several workers fail
+   the deploy instead of guessing — set `PROXY_TARGET_SERVICE` to choose.
 
-   ```jsonc
-   {
-     "name": "pages-reverse-proxy",
-     "pages_build_output_dir": "public/",
-     "services": [
-       {
-         "binding": "API_WORKER",
-         "service": "my-api-worker", // any deployed Worker service name
-       },
-     ],
-     "vars": {
-       "PROXY_TARGET_BINDING": "API_WORKER",
-     },
-   }
-   ```
+The service binding itself is always named `PROXY_TARGET`; use
+`PROXY_TARGET_BINDING` to switch between bindings at runtime:
 
-2. To target a different worker, add another binding and change the var:
+```jsonc
+"services": [
+  { "binding": "PROXY_TARGET", "service": "my-api-worker" },
+  { "binding": "OTHER_WORKER", "service": "my-other-worker" },
+],
+"vars": { "PROXY_TARGET_BINDING": "OTHER_WORKER" }
+```
 
-   ```jsonc
-   "services": [
-     { "binding": "API_WORKER", "service": "my-api-worker" },
-     { "binding": "OTHER_WORKER", "service": "my-other-worker" },
-   ],
-   "vars": { "PROXY_TARGET_BINDING": "OTHER_WORKER" }
-   ```
-
-   Or drop the `vars` entry entirely to use the default `API_WORKER` binding.
+Or drop the `vars` entry entirely to use the default `PROXY_TARGET` binding.
 
 ## Deploy
 
@@ -79,5 +71,5 @@ Responses from the target are returned unchanged. An unconfigured binding yields
 
 ## CI/CD
 
-- **CI**: lint + typecheck + tests on every push and pull request. Dependabot PRs (npm, weekly) auto-merge once `verify` passes. Flaky setup uses the shared `setup-env` / `retry-step` actions.
-- **CD**: deploys to Cloudflare Pages on `main` with `retry-step` around the Wrangler deploy. Set the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and the variable `CLOUDFLARE_PAGES_PROJECT_NAME`. Enable `Allow auto-merge` in repository settings for Dependabot auto-merge.
+- **CI**: lint + typecheck + tests on every push and pull request. Dependabot PRs (npm, weekly) auto-merge once CI passes. Flaky setup uses the shared `setup-env` / `retry-step` actions.
+- **CD**: deploys to Cloudflare Pages after CI succeeds on `main` with `retry-step` around the Wrangler deploy. Set the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and the variables `CLOUDFLARE_PAGES_PROJECT_NAME` and `PROXY_TARGET_SERVICE` (the latter optional when the account holds exactly one non-Pages worker). Enable `Allow auto-merge` in repository settings for Dependabot auto-merge.

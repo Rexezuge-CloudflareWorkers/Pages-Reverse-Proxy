@@ -7,6 +7,7 @@
     "postinstall": "wrangler types --config wrangler.template.jsonc",
     "typegen": "wrangler types --config wrangler.template.jsonc",
     "typecheck": "tsc --noEmit",
+    "configure:pages": "node scripts/deploy/configure-pages-bindings.ts",
     "lint": "eslint --ext .ts --fix --quiet .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
