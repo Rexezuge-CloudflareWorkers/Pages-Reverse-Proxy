@@ -39,6 +39,11 @@ The `postinstall` script runs `wrangler types` automatically, so `worker-configu
 - `test/proxy.test.ts` — Vitest unit tests for binding resolution, header forwarding, body forwarding, and error responses.
 - `public/` — placeholder Pages asset directory (empty except `.gitkeep`).
 - `wrangler.template.jsonc` — Pages config template; copy to `wrangler.jsonc` per deployer; no committed `wrangler.jsonc`.
+- `.github/workflows/continuous-integration.yml` — split `typecheck`, `lint`, `unit-tests` jobs (each retried) plus coverage artifact, Dependabot auto-merge, and upstream-sync deployment dispatch.
+- `.github/workflows/continuous-deployment.yml` — deploys Pages only after CI succeeds (`workflow_run` gate), with create-if-missing project ensure step; `CLOUDFLARE_PAGES_PROJECT_NAME` falls back to `pages-reverse-proxy`.
+- `.github/workflows/backup-main.yml` — mirrors `main` to Azure DevOps / GitLab when backup secrets are configured.
+- `.github/workflows/upstream-sync.yml` — weekly fork sync from upstream (forks only).
+- `.github/workflows/scheduled-version-update.yml` + `.github/.version` — twice-monthly timestamp bump.
 - `.github/dependabot.yml` — weekly npm updates (mirrors Otter).
 - `.github/actions/retry-step/` — shared retry wrapper for flaky commands (mirrors Otter).
 - `.github/actions/setup-env/` — shared pnpm + Node 24 + cached `pnpm install` with retry (mirrors Otter).
@@ -47,7 +52,7 @@ The `postinstall` script runs `wrangler types` automatically, so `worker-configu
 
 - ESLint (typescript-eslint recommended + prettier) and Prettier (140 col, single quotes) match the Mail-Otter repo conventions this was extracted from.
 - Keep `PROXY_TARGET_BINDING` the only runtime knob. Any new power should stay config-driven, not code edits.
-- CI (lint/typecheck/test) runs on every push/PR with concurrency cancel-in-progress; Dependabot PRs auto-merge via `gh pr merge --auto --merge` once `verify` passes (requires `Allow auto-merge` repo setting); CD deploys Pages on `main` using secrets `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` and variable `CLOUDFLARE_PAGES_PROJECT_NAME`, with `retry-step` around installs and deploys.
+- CI runs split `typecheck` / `lint` / `unit-tests` jobs (with coverage artifact) on every push/PR plus `workflow_dispatch` and `Upstream Sync Integration` dispatches, with concurrency cancel-in-progress; Dependabot PRs auto-merge via `gh pr merge --auto --merge` once all jobs pass (requires `Allow auto-merge` repo setting); fork syncs that pass CI dispatch an `Upstream Sync Deployment` event. CD deploys Pages only after CI succeeds (`workflow_run` gate, plus manual / sync dispatch) using secrets `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` and variable `CLOUDFLARE_PAGES_PROJECT_NAME` (falls back to `pages-reverse-proxy`), with project create-if-missing and `retry-step` around installs and deploys.
 
 ## Cloudflare Documentation
 

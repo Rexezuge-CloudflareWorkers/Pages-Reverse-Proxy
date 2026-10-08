@@ -4,18 +4,22 @@ permissions:
   contents: read
 
 on:
+  repository_dispatch:
+    types:
+      - Upstream Sync Integration
+  pull_request:
   push:
     branches:
       - main
-  pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: continuous-integration-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  verify:
-    name: Lint, Typecheck, And Test
+  typecheck:
+    name: Typecheck
     runs-on: ubuntu-latest
 
     steps:
@@ -25,20 +29,61 @@ jobs:
       - name: Setup Environment
         uses: ./.github/actions/setup-env
 
-      - name: Typecheck
-        run: pnpm run typecheck
+      - name: Run Typecheck
+        uses: ./.github/actions/retry-step
+        with:
+          command: pnpm run typecheck
+          max_attempts: '2'
 
-      - name: Lint
-        run: pnpm run lint
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
 
-      - name: Test
-        run: pnpm run test
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+
+      - name: Run Lint
+        uses: ./.github/actions/retry-step
+        with:
+          command: pnpm run lint
+          max_attempts: '2'
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+
+      - name: Run Tests with Coverage
+        uses: ./.github/actions/retry-step
+        with:
+          command: pnpm run test:coverage
+          max_attempts: '2'
+
+      - name: Upload Coverage Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 14
 
   dependabot-auto-merge:
     if: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.state == 'open' && !github.event.repository.fork }}
     name: Auto-Merge Dependabot PR
     needs:
-      - verify
+      - typecheck
+      - lint
+      - unit-tests
     permissions:
       contents: write
       pull-requests: write
@@ -56,3 +101,31 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
+
+  dispatch-upstream-sync-deployment:
+    if: ${{ github.event_name == 'repository_dispatch' && github.event.action == 'Upstream Sync Integration' }}
+    name: Dispatch Upstream Sync Deployment
+    needs:
+      - typecheck
+      - lint
+      - unit-tests
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Dispatch Deployment
+        uses: ./.github/actions/retry-step
+        with:
+          command: >
+            printf '{"event_type":"Upstream Sync Deployment","client_payload":{"branch":"%s","sha":"%s"}}\n'
+            "$PAYLOAD_BRANCH" "$PAYLOAD_SHA"
+            | gh api repos/${{ github.repository }}/dispatches --method POST --input -
+          max_attempts: '2'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PAYLOAD_BRANCH: ${{ github.event.client_payload.branch || 'main' }}
+          PAYLOAD_SHA: ${{ github.event.client_payload.sha || github.sha }}
