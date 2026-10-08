@@ -4,7 +4,7 @@ import { proxyToTarget } from '../functions/[[path]]';
 function buildEnv(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     PROXY_TARGET_BINDING: undefined,
-    API_WORKER: { fetch: vi.fn() },
+    PROXY_TARGET: { fetch: vi.fn() },
     ...overrides,
   };
 }
@@ -22,9 +22,9 @@ function buildContext(env: Record<string, unknown>, request: Request) {
 }
 
 describe('proxyToTarget', () => {
-  it('proxies to the default API_WORKER binding when no target binding is configured', async () => {
+  it('proxies to the default PROXY_TARGET binding when no target binding is configured', async () => {
     const targetFetch = vi.fn().mockResolvedValue(new Response('upstream', { status: 200 }));
-    const env = buildEnv({ API_WORKER: { fetch: targetFetch }, PROXY_TARGET_BINDING: undefined });
+    const env = buildEnv({ PROXY_TARGET: { fetch: targetFetch }, PROXY_TARGET_BINDING: undefined });
     const request = new Request('https://example.com/user/me?a=1', { method: 'GET' });
 
     const response = await proxyToTarget(buildContext(env, request) as never);
@@ -38,7 +38,7 @@ describe('proxyToTarget', () => {
   it('uses the configured PROXY_TARGET_BINDING env var to select the target worker', async () => {
     const targetFetch = vi.fn().mockResolvedValue(new Response('ok'));
     const env = buildEnv({
-      API_WORKER: { fetch: vi.fn() },
+      PROXY_TARGET: { fetch: vi.fn() },
       OTHER_WORKER: { fetch: targetFetch },
       PROXY_TARGET_BINDING: 'OTHER_WORKER',
     });
@@ -51,18 +51,18 @@ describe('proxyToTarget', () => {
   });
 
   it('returns 502 when the selected binding is not configured', async () => {
-    const env = buildEnv({ API_WORKER: undefined, PROXY_TARGET_BINDING: undefined });
+    const env = buildEnv({ PROXY_TARGET: undefined, PROXY_TARGET_BINDING: undefined });
     const request = new Request('https://example.com/', { method: 'GET' });
 
     const response = await proxyToTarget(buildContext(env, request) as never);
 
     expect(response.status).toBe(502);
-    expect(await response.text()).toContain('API_WORKER');
-    expect(env.API_WORKER).toBeUndefined();
+    expect(await response.text()).toContain('PROXY_TARGET');
+    expect(env.PROXY_TARGET).toBeUndefined();
   });
 
   it('returns 502 when the selected binding is not a service binding', async () => {
-    const env = buildEnv({ API_WORKER: 'not-a-fetcher', PROXY_TARGET_BINDING: undefined });
+    const env = buildEnv({ PROXY_TARGET: 'not-a-fetcher', PROXY_TARGET_BINDING: undefined });
     const request = new Request('https://example.com/', { method: 'GET' });
 
     const response = await proxyToTarget(buildContext(env, request) as never);
@@ -72,7 +72,7 @@ describe('proxyToTarget', () => {
 
   it('forwards host, protocol, and uri of the original request', async () => {
     const targetFetch = vi.fn().mockResolvedValue(new Response('ok'));
-    const env = buildEnv({ API_WORKER: { fetch: targetFetch } });
+    const env = buildEnv({ PROXY_TARGET: { fetch: targetFetch } });
     const request = new Request('https://app.example.test:8443/some/path?q=value#frag', { method: 'GET' });
 
     await proxyToTarget(buildContext(env, request) as never);
@@ -85,7 +85,7 @@ describe('proxyToTarget', () => {
 
   it('maps CF-Connecting-IP to X-Forwarded-For', async () => {
     const targetFetch = vi.fn().mockResolvedValue(new Response('ok'));
-    const env = buildEnv({ API_WORKER: { fetch: targetFetch } });
+    const env = buildEnv({ PROXY_TARGET: { fetch: targetFetch } });
     const request = new Request('https://example.com/', {
       method: 'GET',
       headers: { 'CF-Connecting-IP': '203.0.113.7' },
@@ -98,7 +98,7 @@ describe('proxyToTarget', () => {
 
   it('does not set X-Forwarded-For when CF-Connecting-IP is absent', async () => {
     const targetFetch = vi.fn().mockResolvedValue(new Response('ok'));
-    const env = buildEnv({ API_WORKER: { fetch: targetFetch } });
+    const env = buildEnv({ PROXY_TARGET: { fetch: targetFetch } });
     const request = new Request('https://example.com/', { method: 'GET' });
 
     await proxyToTarget(buildContext(env, request) as never);
@@ -108,7 +108,7 @@ describe('proxyToTarget', () => {
 
   it('forwards the request body for non-GET methods', async () => {
     const targetFetch = vi.fn().mockResolvedValue(new Response('ok'));
-    const env = buildEnv({ API_WORKER: { fetch: targetFetch } });
+    const env = buildEnv({ PROXY_TARGET: { fetch: targetFetch } });
     const request = new Request('https://example.com/api/hook', {
       method: 'POST',
       body: JSON.stringify({ hello: 'world' }),
@@ -124,7 +124,7 @@ describe('proxyToTarget', () => {
 
   it('does not attach a body to GET and HEAD requests', async () => {
     const targetFetch = vi.fn().mockResolvedValue(new Response('ok'));
-    const env = buildEnv({ API_WORKER: { fetch: targetFetch } });
+    const env = buildEnv({ PROXY_TARGET: { fetch: targetFetch } });
 
     await proxyToTarget(buildContext(env, new Request('https://example.com/', { method: 'GET' })) as never);
     await proxyToTarget(buildContext(env, new Request('https://example.com/', { method: 'HEAD' })) as never);

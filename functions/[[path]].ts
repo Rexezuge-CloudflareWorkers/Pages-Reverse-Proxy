@@ -1,4 +1,4 @@
-const DEFAULT_TARGET_BINDING: string = 'API_WORKER';
+const DEFAULT_TARGET_BINDING: string = 'PROXY_TARGET';
 
 const CF_CONNECTING_IP_HEADER: string = 'CF-Connecting-IP';
 const FORWARDED_FOR_HEADER: string = 'X-Forwarded-For';
