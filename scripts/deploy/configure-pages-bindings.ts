@@ -13,7 +13,14 @@
  *
  * Pages projects are excluded from auto-discovery: candidates come from the
  * Workers scripts endpoint (which never contains Pages), and any name that also
- * exists as a Pages project is additionally filtered out.
+ * exists as a Pages project is additionally filtered out. The Pages listing is
+ * best-effort: if it fails (e.g. the token lacks Pages read), discovery proceeds
+ * on the scripts list alone with a warning, since that endpoint is Pages-free
+ * by construction.
+ *
+ * Logging policy: error messages must never contain environment-derived values
+ * (account id, tokens, configured names), so detail can be logged safely
+ * (CodeQL clear-text logging). API-derived worker names and counts are fine.
  *
  * Requires Node 24+ (plain `node`, no transpiler: erasable syntax only).
  */
@@ -60,7 +67,7 @@ export function selectSingleCandidate(candidates: string[]): string {
   if (candidates.length === 0) {
     throw new Error(
       'Auto-discovery found no Worker scripts (excluding Pages projects). ' +
-        'Set the PROXY_TARGET_SERVICE repository variable to the backend Worker service name.',
+        'Deploy the backend Worker first, or set the PROXY_TARGET_SERVICE repository variable explicitly.',
     );
   }
   throw new Error(
@@ -87,19 +94,22 @@ export function renderWranglerConfig(template: string, service: string): string 
   return template.replace(`"service": "${SERVICE_PLACEHOLDER}"`, `"service": "${name}"`);
 }
 
-function envelopeError(url: string, envelope: CloudflareEnvelope): Error {
+function envelopeError(label: string, envelope: CloudflareEnvelope): Error {
   const detail: string = envelope.errors?.map((e) => e.message ?? String(e.code ?? '')).join('; ') || 'unknown error';
-  return new Error(`Cloudflare API request failed: GET ${url}: ${detail}`);
+  return new Error(`Cloudflare API request failed for ${label}: ${detail}`);
 }
 
 /**
  * Fetches every page of a Cloudflare list endpoint, returning the picked string
  * per item. `pick` returns `undefined` for items without a usable name, which
- * are skipped rather than failing the whole listing.
+ * are skipped rather than failing the whole listing. `label` is the static
+ * endpoint name used in error messages; the URL (which carries the account id)
+ * is never logged.
  */
 export async function listAll(
   fetchImpl: typeof fetch,
   url: string,
+  label: string,
   token: string,
   pick: (item: unknown) => string | undefined,
 ): Promise<string[]> {
@@ -110,11 +120,11 @@ export async function listAll(
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!response.ok) {
-      throw new Error(`Cloudflare API request failed: GET ${url} (page ${page}): HTTP ${response.status}`);
+      throw new Error(`Cloudflare API request failed for ${label} (page ${page}): HTTP ${response.status}`);
     }
     const envelope = (await response.json()) as CloudflareEnvelope;
     if (!envelope.success) {
-      throw envelopeError(url, envelope);
+      throw envelopeError(label, envelope);
     }
     const items: unknown[] = Array.isArray(envelope.result) ? envelope.result : [];
     for (const item of items) {
@@ -176,15 +186,24 @@ export async function resolveTargetService(options: {
   const scripts: string[] = await listAll(
     options.fetchImpl,
     `${API_BASE}/accounts/${options.accountId}/workers/scripts`,
+    'workers/scripts',
     options.token,
     scriptId,
   );
-  const pages: string[] = await listAll(
-    options.fetchImpl,
-    `${API_BASE}/accounts/${options.accountId}/pages/projects`,
-    options.token,
-    pagesName,
-  );
+  // Best-effort: the scripts endpoint is Pages-free by construction, so a Pages
+  // listing failure only loses the overlap filter, never correctness of the set.
+  let pages: string[] = [];
+  try {
+    pages = await listAll(
+      options.fetchImpl,
+      `${API_BASE}/accounts/${options.accountId}/pages/projects`,
+      'pages/projects',
+      options.token,
+      pagesName,
+    );
+  } catch {
+    console.warn('Warning: Pages project listing failed; auto-discovery proceeds on Worker scripts alone.');
+  }
   return { service: selectSingleCandidate(excludePagesScripts(scripts, new Set(pages))), source: 'auto-discovery' };
 }
 
@@ -197,17 +216,18 @@ async function main(): Promise<void> {
   });
   const template: string = readFileSync(TEMPLATE_PATH, 'utf8');
   writeFileSync(OUTPUT_PATH, renderWranglerConfig(template, resolution.service));
-  console.log(`Backend Worker service "${resolution.service}" configured from ${resolution.source}.`);
+  console.log(`Pages service bindings configured from ${resolution.source}.`);
 }
 
 const invokedDirectly: boolean =
   typeof process.argv[1] === 'string' && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (invokedDirectly) {
-  // Generic message only: error text can carry environment-derived values, so
-  // it must never reach the logs (CodeQL clear-text logging). The failure
-  // modes are enumerated in the README instead.
-  main().catch(() => {
-    console.error('::error::Failed to configure Pages bindings.');
+  // Error text carries no environment-derived values by construction (see the
+  // logging policy above), so logging the message is safe and keeps the
+  // actionable cause — unset variable, zero or several workers, API failure —
+  // visible in the deploy log.
+  main().catch((error: unknown) => {
+    console.error(`::error::${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
   });
 }

@@ -110,7 +110,7 @@ describe('listAll', () => {
       typeof item === 'object' && item !== null && 'id' in item && typeof (item as { id: unknown }).id === 'string'
         ? (item as { id: string }).id
         : undefined;
-    expect(await listAll(fetchImpl, 'https://example.test/items', 'token', pick)).toEqual(['a', 'b', 'c']);
+    expect(await listAll(fetchImpl, 'https://example.test/items', 'items', 'token', pick)).toEqual(['a', 'b', 'c']);
   });
 
   it('throws on an unsuccessful envelope', async () => {
@@ -119,12 +119,26 @@ describe('listAll', () => {
       status: 200,
       json: async () => ({ success: false, errors: [{ message: 'boom' }] }),
     })) as unknown as typeof fetch;
-    await expect(listAll(failing, 'https://example.test/items', 'token', () => 'x')).rejects.toThrow(/boom/);
+    await expect(listAll(failing, 'https://example.test/items', 'items', 'token', () => 'x')).rejects.toThrow(/boom/);
   });
 
   it('throws on a non-OK HTTP status', async () => {
     const fetchImpl = (async () => ({ ok: false, status: 403 })) as unknown as typeof fetch;
-    await expect(listAll(fetchImpl, 'https://example.test/items', 'token', () => 'x')).rejects.toThrow(/403/);
+    await expect(listAll(fetchImpl, 'https://example.test/items', 'items', 'token', () => 'x')).rejects.toThrow(
+      /403/,
+    );
+  });
+
+  it('keeps environment-derived values out of error messages', async () => {
+    const failing = (async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: false, errors: [{ message: 'boom' }] }),
+    })) as unknown as typeof fetch;
+    const error = await listAll(failing, 'https://example.test/items', 'items', 's3cr3t', () => 'x').catch(
+      (e: unknown) => e,
+    );
+    expect(String((error as Error).message)).not.toContain('s3cr3t');
   });
 });
 
@@ -169,6 +183,23 @@ describe('resolveTargetService', () => {
     expect(resolution.service).toBe('api');
   });
 
+  it('proceeds on Worker scripts alone when the Pages listing fails', async () => {
+    const fetchImpl = (async (input: unknown) => {
+      const url: string = String(input).split('?')[0] ?? '';
+      if (url === PAGES_URL) {
+        return { ok: false, status: 403 };
+      }
+      return { ok: true, status: 200, json: async () => envelope([{ id: 'only-worker' }]) };
+    }) as unknown as typeof fetch;
+    const resolution = await resolveTargetService({
+      configured: undefined,
+      fetchImpl,
+      accountId: 'test-account',
+      token: 'token',
+    });
+    expect(resolution).toEqual({ service: 'only-worker', source: 'auto-discovery' });
+  });
+
   it('fails when discovery finds no workers', async () => {
     const fetchImpl = stubFetch({ [SCRIPTS_URL]: envelope([]), [PAGES_URL]: envelope([]) });
     await expect(
@@ -192,5 +223,22 @@ describe('resolveTargetService', () => {
       resolveTargetService({ configured: undefined, fetchImpl, accountId: '', token: '' }),
     ).rejects.toThrow(/CLOUDFLARE/);
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('keeps the account id and token out of failure messages', async () => {
+    const fetchImpl = stubFetch({
+      [SCRIPTS_URL]: envelope([{ id: 'one' }, { id: 'two' }]),
+      [PAGES_URL]: envelope([]),
+    });
+    const error = await resolveTargetService({
+      configured: undefined,
+      fetchImpl,
+      accountId: 'test-account',
+      token: 's3cr3t',
+    }).catch((e: unknown) => e);
+    const message: string = (error as Error).message;
+    expect(message).toContain('PROXY_TARGET_SERVICE');
+    expect(message).not.toContain('test-account');
+    expect(message).not.toContain('s3cr3t');
   });
 });
