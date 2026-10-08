@@ -124,7 +124,12 @@ export async function listAll(
       }
     }
     const totalPages: number | undefined = envelope.result_info?.total_pages;
-    if ((totalPages !== undefined && page >= totalPages) || items.length < PAGE_SIZE) {
+    if (totalPages !== undefined) {
+      if (page >= totalPages) {
+        return names;
+      }
+    } else if (items.length < PAGE_SIZE) {
+      // No page count reported, so a short page is the only end-of-list signal.
       return names;
     }
     page += 1;
@@ -198,8 +203,11 @@ async function main(): Promise<void> {
 const invokedDirectly: boolean =
   typeof process.argv[1] === 'string' && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (invokedDirectly) {
-  main().catch((error: unknown) => {
-    console.error(`::error::${error instanceof Error ? error.message : String(error)}`);
+  // Generic message only: error text can carry environment-derived values, so
+  // it must never reach the logs (CodeQL clear-text logging). The failure
+  // modes are enumerated in the README instead.
+  main().catch(() => {
+    console.error('::error::Failed to configure Pages bindings.');
     process.exit(1);
   });
 }
